@@ -1,7 +1,7 @@
-#
-# Created by none other than Babaman :)
-# URAVIUM WAS HERE
-#
+# This file is part of ajerick's MinecraftSkripts.
+# ajerick's MinecraftSkripts is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+# ajerick's MinecraftSkripts is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# You should have received a copy of the GNU General Public License along with ajerick's MinecraftSkripts. If not, see <https://www.gnu.org/licenses/>. 
 
 #
 # ! PERMANENT GLOBAL VARIABLES !
@@ -22,7 +22,6 @@
 # bjisfirstturn.<UUID>: If it's the player's first turn
 # bjisover.<UUID>: If the game is over
 # bjisgame.<UUID>: If a game has started
-#
 # Any GUI created for a game will have the ID "BLACKJACK-<UUID>"
 #
 
@@ -67,8 +66,8 @@ function bjMenu(p: player, n: number):
     if {_balance} < {bjbid.%{_uuid}%}:
         send "You don't have enough money to make that bet!" to {_p}
         stop
-    if {bjbid.%{_uuid}%} = 0:
-        send "Cannot bet $0!" to {_p}
+    if {bjbid.%{_uuid}%} <= 0:
+        send "Cannot bet $0 or less!" to {_p}
         stop      
     clear {bjdeck.%{_uuid}%::*}
     clear {bjdealer.%{_uuid}%::*}
