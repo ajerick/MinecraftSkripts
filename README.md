@@ -11,5 +11,6 @@ Requires these Spigot plugins in addition:
 Bet 500 vault balance in a game of blackjack against the dealer:
 ```/blackjack 500```
 ```/bj 500```
+
 See your blackjack stats:
 ```/bj stats```
