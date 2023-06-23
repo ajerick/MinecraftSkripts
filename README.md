@@ -8,8 +8,8 @@ Requires these Spigot plugins in addition:
 3. [Vault](https://github.com/milkbowl/Vault)
 
 ### Examples
-Bet 500 vault balance in a game of blackjack against the dealer:
+1. Bet 500 vault balance in a game of blackjack against the dealer:
 ```/blackjack 500```
 ```/bj 500```
-See your blackjack stats:
+2. See your blackjack stats:
 ```/bj stats```
