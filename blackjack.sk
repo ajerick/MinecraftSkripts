@@ -1,0 +1,352 @@
+#
+# Created by none other than Babaman :)
+# URAVIUM WAS HERE
+#
+
+#
+# ! PERMANENT GLOBAL VARIABLES !
+# ! These hold game statistics!
+#
+# bjwins.<UUID>::1: Number of wins  
+# bjwins.<UUID>::2: Money won
+# bjlosses.<UUID>::1: Number of losses
+# bjlosses.<UUID>::2: Money lost
+#
+# ! TEMPORARY GLOBAL VARIABLES !
+# ! All variables listed below are extremely volatile and exist for the span of one game !
+#
+# bjbid.<UUID>: A number representing the bid of a player
+# bjdeck.<UUID>: A list of integers representing the player's hand in the player's game
+# bjdealer.<UUID>: A list of integers representing the dealer's hand in the player's game
+# bjisending.<UUID>: If true, the player cannot interact with the GUI, if false, the player can
+# bjisfirstturn.<UUID>: If it's the player's first turn
+# bjisover.<UUID>: If the game is over
+# bjisgame.<UUID>: If a game has started
+#
+# Any GUI created for a game will have the ID "BLACKJACK-<UUID>"
+#
+
+on quit:
+    set {_uuid} to player's uuid
+    if {bjisgame.%{_uuid}%}:
+        # If a game is going, lose the game
+        add 1 to {bjlosses.%{_uuid}%::1}
+        add {bjbid.%{_uuid}%} to {bjlosses.%{_uuid}%::2}
+        bjCleanup(player)
+
+command /blackjack <text>:
+    aliases: /bj
+    trigger:
+        if arg-1 is set:
+            if arg-1 parsed as a number is set:
+                bjMenu(player, arg-1 parsed as a number)
+                stop
+            else if arg-1 is "stats":
+                send "&8&l====&r &6&lBLACKJACK&r &8&l====" to player
+                send "&a&lWins:&r %{bjwins.%player's uuid%::1}%" to player
+                send "&c&lLosses:&r %{bjlosses.%player's uuid%::1}%" to player
+                set {_net} to {bjwins.%player's uuid%::2} - {bjlosses.%player's uuid%::2}
+                if {_net} >= 0:
+                    set {_sym} to "+"
+                    set {_color} to "&a"
+                else:
+                    set {_sym} to "-"
+                    set {_color} to "&c"
+                set {_net} to bjFormatNumber(abs({_net}))
+                send "%{_color}%&lNet:&r %{_sym}%$%{_net}%" to player
+                send "&8&l==================" to player
+                stop
+
+        send "Please input a bet with '/bj number' or check your stats with '/bj stats'!"
+
+# play the game
+function bjMenu(p: player, n: number):
+    set {_uuid} to uuid of {_p}
+    set {bjbid.%{_uuid}%} to {_n}
+    set {_balance} to the money of {_p}
+    if {_balance} < {bjbid.%{_uuid}%}:
+        send "You don't have enough money to make that bet!" to {_p}
+        stop
+    if {bjbid.%{_uuid}%} = 0:
+        send "Cannot bet $0!" to {_p}
+        stop      
+    clear {bjdeck.%{_uuid}%::*}
+    clear {bjdealer.%{_uuid}%::*}
+    set {bjisgame.%{_uuid}%} to true
+    set {bjisover.%{_uuid}%} to false  
+    set {bjisending.%{_uuid}%} to false
+    set {_bidtxt} to bjFormatNumber({bjbid.%{_uuid}%})
+    set {bjisfirstturn.%{_uuid}%} to true
+    remove {bjbid.%{_uuid}%} from the money of {_p}
+
+    create a gui with id "BLACKJACK-%{_uuid}%" with virtual chest inventory with 6 rows named "              &8&nBlackjack" with shape "dxxxxxxxe", "xxyyyyyxx", "xyijyykyx", "yyyyyyyyy", "yyfgyyhyy", "yayybyycy":
+        run on gui close:
+            if not {bjisover.%{_uuid}%}:
+                cancel gui close
+        
+        # draw first two cards for player
+        add bjDrawCard() to {bjdeck.%{_uuid}%::*}
+        add bjDrawCard() to {bjdeck.%{_uuid}%::*}
+        # draw first card for dealer
+        add bjDrawCard() to {bjdealer.%{_uuid}%::*}
+        
+        # check win condition
+        set {_tsitem} to book and quill
+        set {_score} to bjMinMaxScore({bjdeck.%{_uuid}%::*})
+        if {_score} = 21:
+            set {_tsitem} to glowing nether star
+            set {bjisending.%{_uuid}%} to true
+            bjStand({_p})
+
+        # border
+        make gui slot "x" with black stained glass pane named "&2&l! BIG MONEY !"
+        make gui slot "y" with lime stained glass pane named " "
+
+        # gameplay buttons
+        make gui slot "a" with blue candle named "&9&lStand" with lore "&7Finalize bet":
+            if not {bjisending.%{_uuid}%}:
+                bjStand({_p})
+        make gui slot "b" with green candle named "&a&lHit" with lore "&7Draw a card":
+            if not {bjisending.%{_uuid}%}:
+                set {bjisfirstturn.%{_uuid}%} to false
+                bjHit({_p})
+                if bjMinMaxScore({bjdeck.%{_uuid}%::*}) >= 21:
+                    bjStand({_p})
+        if {_balance} < {bjbid.%{_uuid}%} * 2:
+            # double down financially not possible
+            make gui slot "c" with gray candle named "&e&lDOUBLE DOWN" with lore "&7You don't have enough money to double down!"
+        else:
+            # double down *is* financially possible
+            make gui slot "c" with red candle named "&e&lDOUBLE DOWN" with lore "&7Double your bet but only hit once":
+                if check [not {bjisending.%{_uuid}%}]->[{bjisfirstturn.%{_uuid}%}]:
+                    remove {bjbid.%{_uuid}%} from the money of {_p}
+                    set {bjbid.%{_uuid}%} to {bjbid.%{_uuid}%} * 2
+                    set {_bidtxt} to bjFormatNumber({bjbid.%{_uuid}%})
+                    edit gui with id "BLACKJACK-%{_uuid}%":
+                        make gui slot "e" with glowing emerald block named "&2&l$%{_bidtxt}%"
+                    bjHit({_p})
+                    bjStand({_p})
+        make gui slot "d" with barrier named "&4&lFORFEIT" with lore "&c&lYOU WILL LOSE YOUR BID":
+            # Player "lose" button
+            if not {bjisending.%{_uuid}%}:
+                set {bjisending.%{_uuid}%} to true
+                bjLose({_p})
+        
+        # bid info
+        make gui slot "e" with emerald named "&2&l$%{_bidtxt}%"
+
+        # player hand
+        make gui slot "f" with bjCardValue({bjdeck.%{_uuid}%::1}) of glowing paper named bjCardName({bjdeck.%{_uuid}%::1})
+        make gui slot "g" with bjCardValue({bjdeck.%{_uuid}%::2}) of glowing paper named bjCardName({bjdeck.%{_uuid}%::2})
+        make gui slot "h" with {_score} of {_tsitem} named "&a&lYour Score:&r %{_score}%" with lore "&7Smallest Score: %bjMinScore({bjdeck.%{_uuid}%::*})%"
+
+        # dealer hand
+        make gui slot "i" with bjCardValue({bjdealer.%{_uuid}%::1}) of glowing paper named bjCardName({bjdealer.%{_uuid}%::1})
+        make gui slot "j" with red stained glass pane named "&cUnknown"
+        make gui slot "k" with bjMinMaxScore({bjdealer.%{_uuid}%::*}) of book and quill named "&c&lDealer's Score:&r %bjMinMaxScore({bjdealer.%{_uuid}%::*})%" with lore "&7Smallest Score: %bjMinScore({bjdealer.%{_uuid}%::*})%"
+
+        open the last created gui to {_p}
+
+# Get winner
+function bjEndGame(p: player):
+    set {_uuid} to uuid of {_p}
+    set {_pscore} to bjMinMaxScore({bjdeck.%{_uuid}%::*})
+    set {_dscore} to bjMinMaxScore({bjdealer.%{_uuid}%::*})
+    if {_pscore} > 21:
+        bjLose({_p})
+    else if {_dscore} > 21:
+        bjWin({_p})
+    else if {_pscore} = {_dscore}:
+        bjLose({_p})
+    else if {_pscore} = 21:
+        bjWin({_p})
+    else if {_dscore} = 21:
+        bjLose({_p})
+    else if {_pscore} > {_dscore}:
+        bjWin({_p})
+    else:
+        bjLose({_p})
+    
+
+# Cleanup variables and allow for new game
+function bjCleanup(p: player):
+    set {_uuid} to uuid of {_p}
+    set {bjisover.%{_uuid}%} to true
+    close inventory of {_p} 
+    delete {bjbid.%{_uuid}%}
+    clear {bjdeck.%{_uuid}%::*}
+    clear {bjdealer.%{_uuid}%::*}
+    set {bjisending.%{_uuid}%} to false
+    set {bjisfirstturn.%{_uuid}%} to true
+    delete gui with id "BLACKJACK-%{_uuid}%"
+    set {bjisgame.%{_uuid}%} to false
+
+function bjWin(p: player):
+    set {_uuid} to uuid of {_p}
+    set {_winnings} to {bjbid.%{_uuid}%} * 2
+    add {_winnings} to the money of {_p}
+    add 1 to {bjwins.%{_uuid}%::1}
+    add {_winnings} / 2 to {bjwins.%{_uuid}%::2}
+    set {_wintxt} to bjFormatNumber({_winnings} / 2)
+    send "&aBlackjack won! +$%{_wintxt}%" to {_p}
+    if {_winnings} is greater than 100000:
+        broadcast "&eBIG WIN! &a%{_p}%&e just won &6$%{_wintxt}% &ein a game of Blackjack!"
+        loop 2 times:
+            play sound "entity.player.levelup" with volume 0.2 at {_p} for {_p}
+            wait 15 ticks
+    play sound "entity.player.levelup" with volume 0.2 at {_p} for {_p}
+    wait 15 ticks
+    bjCleanup({_p})
+
+function bjLose(p: player):
+    set {_uuid} to uuid of {_p}
+    add 1 to {bjlosses.%{_uuid}%::1}
+    add {bjbid.%{_uuid}%} to {bjlosses.%{_uuid}%::2}
+    send "&cBlackjack lost! -$%bjFormatNumber({bjbid.%{_uuid}%})%" to {_p}
+    play sound "entity.villager.no" with volume 0.2 and pitch 1 at {_p} for {_p}
+    bjCleanup({_p})
+
+function bjStand(p: player):
+    set {_uuid} to uuid of {_p}
+    set {bjisending.%{_uuid}%} to true
+    play sound "entity.experience_orb.pickup" with volume 1 and pitch 1 at {_p} for {_p}
+    edit gui with id "BLACKJACK-%{_uuid}%":
+        add bjDrawCard() to {bjdealer.%{_uuid}%::*}
+        wait 10 ticks
+        set {_val} to last element of {bjdealer.%{_uuid}%::*}
+        make gui slot "j" with bjCardValue({_val}) of glowing paper named bjCardName({_val})
+        set {_val} to bjMinMaxScore({bjdealer.%{_uuid}%::*})
+        set {_tsitem} to book and quill
+        if {_val} = 21:
+            play sound "entity.villager.no" with volume 3 and pitch 1 at {_p} for {_p}
+            set {_tsitem} to glowing nether star
+        else if {_val} > 21:
+            play sound "entity.player.levelup" with volume 1 and pitch 1 at {_p} for {_p}
+            set {_tsitem} to redstone block
+        make gui slot "k" with {_val} of {_tsitem} named "&c&lDealer's Score:&r %{_val}%" with lore "&7Smallest Score: %bjMinScore({bjdealer.%{_uuid}%::*})%"        
+        while check [bjMinMaxScore({bjdeck.%{_uuid}%::*}) <= 21]->[bjMinMaxScore({bjdealer.%{_uuid}%::*}) < bjMinMaxScore({bjdeck.%{_uuid}%::*})]:
+            wait 10 ticks
+            set {_val} to bjMinMaxScore({bjdealer.%{_uuid}%::*})
+            make gui slot "i" with {_val} of glowing bookshelf named "&cPrevious Hand&r (%{_val}%)" with lore "&7Aces: %bjGetAces({bjdealer.%{_uuid}%::*})%"
+            add bjDrawCard() to {bjdealer.%{_uuid}%::*}
+            set {_val} to last element of {bjdealer.%{_uuid}%::*}
+            make gui slot "j" with bjCardValue({_val}) of glowing paper named bjCardName({_val})
+            set {_val} to bjMinMaxScore({bjdealer.%{_uuid}%::*})
+            set {_tsitem} to book and quill
+            if {_val} = 21:
+                play sound "entity.villager.no" with volume 3 and pitch 1 at {_p} for {_p}
+                set {_tsitem} to glowing nether star
+            else if {_val} > 21:
+                if bjMinMaxScore({bjdeck.%{_uuid}%::*}) <= 21:
+                    play sound "entity.player.levelup" with volume 1 and pitch 1 at {_p} for {_p}
+                set {_tsitem} to redstone block
+            make gui slot "k" with {_val} of {_tsitem} named "&c&lDealer's Score:&r %{_val}%" with lore "&7Smallest Score: %bjMinScore({bjdealer.%{_uuid}%::*})%"
+            play sound "entity.experience_orb.pickup" with volume 1 and pitch 1 at {_p} for {_p}
+    
+        wait 20 ticks
+        bjEndGame({_p})
+
+function bjHit(p: player):
+    set {_uuid} to uuid of {_p}
+    if bjMinScore({bjdeck.%{_uuid}%::*}) < 21:
+        edit gui with id "BLACKJACK-%{_uuid}%":
+            set {_val} to bjMinMaxScore({bjdeck.%{_uuid}%::*})
+            make gui slot "f" with {_val} of glowing bookshelf named "&aPrevious Hand&r (%{_val}%)" with lore "&7Aces: %bjGetAces({bjdeck.%{_uuid}%::*})%"
+            add bjDrawCard() to {bjdeck.%{_uuid}%::*}
+            set {_val} to last element of {bjdeck.%{_uuid}%::*}
+            make gui slot "g" with bjCardValue({_val}) of glowing paper named bjCardName({_val})
+            set {_val} to bjMinMaxScore({bjdeck.%{_uuid}%::*})
+            set {_tsitem} to book and quill
+            if {_val} = 21:
+                play sound "entity.player.levelup" with volume 1 and pitch 1 at {_p} for {_p}
+                set {_tsitem} to glowing nether star
+            else if {_val} > 21:
+                play sound "entity.villager.no" with volume 3 and pitch 1 at {_p} for {_p}
+                set {_tsitem} to redstone block
+            make gui slot "h" with {_val} of {_tsitem} named "&a&lYour Score:&r %{_val}%" with lore "&7Smallest Score: %bjMinScore({bjdeck.%{_uuid}%::*})%"
+            play sound "entity.experience_orb.pickup" with volume 1 and pitch 1 at {_p} for {_p}
+
+
+# return the amount of aces in a hand
+function bjGetAces(list: integers) :: number:
+    set {_aces} to 0
+    loop {_list::*}:
+        if loop-value = 1:
+            add 1 to {_aces}
+    
+    return {_aces}
+
+# get the highest score under or equal to 21 of a hand
+function bjMinMaxScore(list: integers) :: number:
+    set {_score} to 0
+    set {_aces} to 0
+    loop {_list::*}:
+        if loop-value = 1:
+            set {_aces} to {_aces} + 1
+            set {_score} to {_score} + 11
+        else:
+            set {_score} to {_score} + bjCardValue(loop-value)
+
+    while check [{_score} > 21]->[{_aces} > 0]:
+        set {_score} to {_score} - 10
+        set {_aces} to {_aces} - 1
+
+    return {_score}
+
+# get the absolute lowest score of a hand
+function bjMinScore(list: integers) :: number:
+    set {_score} to 0
+
+    loop {_list::*}:
+        add bjCardValue(loop-value) to {_score}
+
+    return {_score}
+
+function bjCardValue(card: integer) :: integer:
+    set {_value} to {_card}
+    if check [{_value} >= 11]->[{_value} <= 13]:
+        set {_value} to 10
+    
+    return {_value}
+
+# returns a random value representing a card
+# 1: ACE
+# 2-10: Value Cards
+# 11: Jack
+# 12: Queen
+# 13: King
+function bjDrawCard() :: integer:
+    set {_card} to a random integer between 1 and 13
+    return {_card}
+
+# returns the card name a card given its card value
+function bjCardName(card: integer) :: text:
+    if {_card} = 1:
+        return "ACE"
+    else if {_card} = 11:
+        return "JACK"
+    else if {_card} = 12:
+        return "QUEEN"
+    else if {_card} = 13:
+        return "KING"
+    else if {_card} >= 2:
+        if {_card} <= 10:
+            return "%{_card}%"
+    
+    return "JOKER"
+
+# put commas into a big number
+function bjFormatNumber(n: object) :: text:
+    if "%{_n}%" contains ".":
+        set {_s::*} to split "%{_n}%" at "."
+        set {_n} to "%bjA({_s::1})%.%last 2 characters of {_s::2}%"
+        return "%{_n}%"
+    else:
+        set {_n} to bjA("%{_n}%")
+        return "%{_n} ? 0%"
+
+# utility function of function 'formNumber'
+function bjA(b: text) :: text:
+    if length of {_b} > 3:
+        return "%bjA(first length of {_b} - 3 characters of {_b})%,%last 3 characters of {_b}%"
+    return {_b}
